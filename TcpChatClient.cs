@@ -75,6 +75,13 @@ try
     // Send messages
     while (true)
     {
+        // Check if we're still connected
+        if (receiveTask.IsCompleted)
+        {
+            AnsiConsole.MarkupLine("[red]Disconnected from server.[/]");
+            break;
+        }
+
         var message = Console.ReadLine();
 
         if (string.IsNullOrWhiteSpace(message))
@@ -83,12 +90,20 @@ try
         if (message.Equals("exit", StringComparison.OrdinalIgnoreCase))
             break;
 
-        var messageBytes = Encoding.UTF8.GetBytes(message + "\n");
-        await stream.WriteAsync(messageBytes, cts.Token);
+        try
+        {
+            var messageBytes = Encoding.UTF8.GetBytes(message + "\n");
+            await stream.WriteAsync(messageBytes, cts.Token);
+        }
+        catch (Exception)
+        {
+            AnsiConsole.MarkupLine("[red]Failed to send message. Connection lost.[/]");
+            break;
+        }
     }
 
     cts.Cancel();
-    await receiveTask;
+    try { await receiveTask; } catch { }
 }
 catch (Exception ex)
 {
@@ -111,7 +126,11 @@ async Task ReceiveMessagesAsync(NetworkStream stream, CancellationToken token)
         while (!token.IsCancellationRequested)
         {
             var bytesRead = await stream.ReadAsync(buffer, token);
-            if (bytesRead == 0) break;
+            if (bytesRead == 0)
+            {
+                AnsiConsole.MarkupLine("[red]Server closed the connection.[/]");
+                break;
+            }
 
             var message = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
 
